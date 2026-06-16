@@ -68,6 +68,8 @@ create policy "user_spots_delete_own" on public.user_spots
 
 -- ---------------------------------------------------------------------------
 -- 4. Cache is now read via the link: a user sees cache for spots they follow.
+--    (These old policies referenced spots.user_id, so they must be replaced
+--    before that column can be dropped.)
 -- ---------------------------------------------------------------------------
 drop policy "forecast_cache_select_own" on public.forecast_cache;
 drop policy "tide_cache_select_own" on public.tide_cache;
@@ -82,7 +84,14 @@ create policy "tide_cache_select_linked" on public.tide_cache
     where us.spot_id = tide_cache.spot_id and us.user_id = auth.uid()));
 
 -- ---------------------------------------------------------------------------
--- 5. Spots become a shared catalogue: drop ownership policies, then the column.
+-- 5. Drop the old per-spot prefs table FIRST. Its RLS policies reference
+--    spots.user_id, so they must be removed before that column can be dropped
+--    (dropping the table drops its dependent policies too).
+-- ---------------------------------------------------------------------------
+drop table public.spot_prefs;
+
+-- ---------------------------------------------------------------------------
+-- 6. Spots become a shared catalogue: drop ownership policies and the column.
 -- ---------------------------------------------------------------------------
 drop policy "spots_select_own" on public.spots;
 drop policy "spots_insert_own" on public.spots;
@@ -97,8 +106,3 @@ create policy "spots_select_authenticated" on public.spots
   for select using (auth.uid() is not null);
 create policy "spots_insert_authenticated" on public.spots
   for insert with check (auth.uid() is not null);
-
--- ---------------------------------------------------------------------------
--- 6. Preferences now live on user_spots; the old per-spot table is redundant.
--- ---------------------------------------------------------------------------
-drop table public.spot_prefs;
