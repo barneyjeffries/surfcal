@@ -61,7 +61,7 @@ export async function GET(
   return new Response(buildCalendar('SurfCal', events), {
     headers: {
       'Content-Type': 'text/calendar; charset=utf-8',
-      'Cache-Control': 'public, max-age=3600',
+      'Cache-Control': 'no-store',
     },
   })
 }
