@@ -1,5 +1,6 @@
 import type { ForecastPoint, TideEvent } from '@/lib/providers/types'
 import { tideStateAt, type TideState } from './tide'
+import { isDaylight } from './sun'
 
 /**
  * Scoring engine: cached forecast + tide + a user's thresholds -> qualifying
@@ -170,11 +171,17 @@ function buildWindow(points: ForecastPoint[]): Window {
  * Score one spot: return the qualifying surf windows for the given forecast,
  * tide extremes, and thresholds. Consecutive qualifying hours (<= 60 min apart)
  * collapse into a single window.
+ *
+ * `lat`/`lng` (east-positive, so UK lng is negative) gate each hour to daylight
+ * — first light through sunset — so night hours never qualify and windows end at
+ * the last whole daylight hour. Daylight is computed locally (no API).
  */
 export function scoreSpot(
   forecast: ForecastPoint[],
   tide: TideEvent[],
   prefs: SpotPrefs,
+  lat: number,
+  lng: number,
 ): Window[] {
   const sorted = [...forecast].sort(
     (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime(),
@@ -190,10 +197,12 @@ export function scoreSpot(
   }
 
   for (const point of sorted) {
-    const tMs = new Date(point.time).getTime()
-    const tideState = tideStateAt(tide, new Date(point.time))
+    const instant = new Date(point.time)
+    const tMs = instant.getTime()
+    const tideState = tideStateAt(tide, instant)
 
-    if (!hourQualifies(point, prefs, tideState)) {
+    // Per-hour AND: thresholds must pass AND the hour must be in daylight.
+    if (!hourQualifies(point, prefs, tideState) || !isDaylight(lat, lng, instant)) {
       flush()
       continue
     }

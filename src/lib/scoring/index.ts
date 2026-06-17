@@ -36,7 +36,7 @@ export async function getWindowsForUser(userId: string): Promise<SpotWindows[]> 
        wind_dir_min_deg, wind_dir_max_deg, wind_dir_wraps, wind_speed_max_kmh,
        tide_direction, tide_height_min_norm, tide_height_max_norm,
        tide_high_offset_min_minutes, tide_high_offset_max_minutes,
-       spots ( name )`,
+       spots ( name, latitude, longitude )`,
     )
     .eq('user_id', userId)
 
@@ -98,15 +98,20 @@ export async function getWindowsForUser(userId: string): Promise<SpotWindows[]> 
     // `spots` embed is a single related row (user_spots.spot_id -> spots.id),
     // but tolerate an array shape just in case the client types it that way.
     const rel = link.spots as unknown
-    const name = Array.isArray(rel)
-      ? ((rel[0]?.name as string) ?? '')
-      : (((rel as { name?: string } | null)?.name) ?? '')
+    const spot = (Array.isArray(rel) ? rel[0] : rel) as {
+      name?: string
+      latitude?: number
+      longitude?: number
+    } | null
+    const name = spot?.name ?? ''
+    const lat = spot?.latitude ?? 0
+    const lng = spot?.longitude ?? 0
 
     results.push({
       spotId,
       label: link.label,
       name,
-      windows: scoreSpot(forecast, tide, prefs),
+      windows: scoreSpot(forecast, tide, prefs, lat, lng),
     })
   }
 

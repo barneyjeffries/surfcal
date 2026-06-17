@@ -12,7 +12,7 @@ const COLUMNS =
   'wind_dir_min_deg, wind_dir_max_deg, wind_dir_wraps, wind_speed_max_kmh, ' +
   'tide_direction, tide_height_min_norm, tide_height_max_norm, ' +
   'tide_high_offset_min_minutes, tide_high_offset_max_minutes, ' +
-  'spots ( name, timezone )'
+  'spots ( name, timezone, latitude, longitude )'
 
 export default async function SpotPreferencesPage({
   params,
@@ -39,7 +39,12 @@ export default async function SpotPreferencesPage({
   if (!data) notFound()
 
   const row = data as unknown as Prefs & {
-    spots: { name: string; timezone: string } | null
+    spots: {
+      name: string
+      timezone: string
+      latitude: number
+      longitude: number
+    } | null
   }
   const { spots, ...prefs } = row
 
@@ -83,6 +88,8 @@ export default async function SpotPreferencesPage({
       forecast={forecast}
       tide={tide}
       timezone={spots?.timezone ?? 'UTC'}
+      lat={spots?.latitude ?? 0}
+      lng={spots?.longitude ?? 0}
     />
   )
 }

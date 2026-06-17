@@ -27,16 +27,20 @@ export function WindowPreview({
   prefs,
   timezone,
   unit,
+  lat,
+  lng,
 }: {
   forecast: ForecastPoint[]
   tide: TideEvent[]
   prefs: SpotPrefs
   timezone: string
   unit: Unit
+  lat: number
+  lng: number
 }) {
   const windows = useMemo(
-    () => scoreSpot(forecast, tide, prefs),
-    [forecast, tide, prefs],
+    () => scoreSpot(forecast, tide, prefs, lat, lng),
+    [forecast, tide, prefs, lat, lng],
   )
 
   // Formatters in the spot's own timezone (falling back to UTC if unset).

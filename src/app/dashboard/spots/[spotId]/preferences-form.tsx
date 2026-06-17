@@ -151,6 +151,8 @@ export function PreferencesForm({
   forecast,
   tide,
   timezone,
+  lat,
+  lng,
 }: {
   spotId: string
   spotName: string
@@ -158,6 +160,8 @@ export function PreferencesForm({
   forecast: ForecastPoint[]
   tide: TideEvent[]
   timezone: string
+  lat: number
+  lng: number
 }) {
   const [state, formAction, pending] = useActionState<SaveState, FormData>(
     savePreferences.bind(null, spotId),
@@ -466,6 +470,8 @@ export function PreferencesForm({
             prefs={livePrefs}
             timezone={timezone}
             unit={unit}
+            lat={lat}
+            lng={lng}
           />
         </aside>
       </div>
