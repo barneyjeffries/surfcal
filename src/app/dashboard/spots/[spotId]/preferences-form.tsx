@@ -2,8 +2,69 @@
 
 import Link from 'next/link'
 import { useActionState, useState } from 'react'
+import type { ForecastPoint, TideEvent } from '@/lib/providers/types'
+import type { SpotPrefs } from '@/lib/scoring/scoring'
 import { savePreferences } from './actions'
 import type { Prefs, SaveState } from './types'
+import { WindowPreview } from './window-preview'
+
+/**
+ * Build a SpotPrefs from the live form state, matching the save action's
+ * null-handling exactly: "any direction" → null/null/false, blank tide offsets
+ * → null. Empty/NaN numeric degrees collapse to null (unbounded) so the preview
+ * doesn't blank out mid-edit. Real validation still happens on save.
+ */
+function readLivePrefs(form: HTMLFormElement): SpotPrefs {
+  const fd = new FormData(form)
+  const num = (k: string) => Number(String(fd.get(k) ?? '').trim())
+  const optInt = (k: string): number | null => {
+    const s = String(fd.get(k) ?? '').trim()
+    if (s === '') return null
+    const n = Number(s)
+    return Number.isNaN(n) ? null : Math.trunc(n)
+  }
+  const arc = (prefix: string) => {
+    if (fd.get(`${prefix}_any`) === 'on') {
+      return { min: null, max: null, wraps: false }
+    }
+    const min = Number(String(fd.get(`${prefix}_min_deg`) ?? '').trim())
+    const max = Number(String(fd.get(`${prefix}_max_deg`) ?? '').trim())
+    return {
+      min: Number.isNaN(min) ? null : min,
+      max: Number.isNaN(max) ? null : max,
+      wraps: fd.get(`${prefix}_wraps`) === 'on',
+    }
+  }
+
+  const swell = arc('swell_dir')
+  const wind = arc('wind_dir')
+  const td = String(fd.get('tide_direction') ?? 'any')
+
+  return {
+    swell_height_min_m: num('swell_height_min_m'),
+    swell_height_max_m: num('swell_height_max_m'),
+    swell_period_min_s: num('swell_period_min_s'),
+    swell_dir_min_deg: swell.min,
+    swell_dir_max_deg: swell.max,
+    swell_dir_wraps: swell.wraps,
+    wind_dir_min_deg: wind.min,
+    wind_dir_max_deg: wind.max,
+    wind_dir_wraps: wind.wraps,
+    wind_speed_max_kmh: num('wind_speed_max_kmh'),
+    tide_direction: td === 'rising' || td === 'falling' ? td : 'any',
+    tide_height_min_norm: num('tide_height_min_norm'),
+    tide_height_max_norm: num('tide_height_max_norm'),
+    tide_high_offset_min_minutes: optInt('tide_high_offset_min_minutes'),
+    tide_high_offset_max_minutes: optInt('tide_high_offset_max_minutes'),
+  }
+}
+
+/** The form's initial SpotPrefs, taken from the saved row. */
+function initialPrefs(prefs: Prefs): SpotPrefs {
+  // Prefs is SpotPrefs plus `label`; drop the label.
+  const { label: _label, ...rest } = prefs
+  return rest
+}
 
 const inputClass =
   'mt-1 w-full rounded-lg border border-black/[.12] bg-white px-3 py-2 text-black outline-none focus:border-black dark:border-white/[.2] dark:bg-black dark:text-zinc-50 dark:focus:border-zinc-50 disabled:opacity-40'
@@ -111,15 +172,24 @@ export function PreferencesForm({
   spotId,
   spotName,
   prefs,
+  forecast,
+  tide,
+  timezone,
 }: {
   spotId: string
   spotName: string
   prefs: Prefs
+  forecast: ForecastPoint[]
+  tide: TideEvent[]
+  timezone: string
 }) {
   const [state, formAction, pending] = useActionState<SaveState, FormData>(
     savePreferences.bind(null, spotId),
     { status: 'idle' },
   )
+
+  // Live prefs for the preview — rebuilt from the form on every edit.
+  const [livePrefs, setLivePrefs] = useState<SpotPrefs>(() => initialPrefs(prefs))
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
@@ -139,7 +209,18 @@ export function PreferencesForm({
         </p>
       </header>
 
-      <form action={formAction} className="space-y-8">
+      <WindowPreview
+        forecast={forecast}
+        tide={tide}
+        prefs={livePrefs}
+        timezone={timezone}
+      />
+
+      <form
+        action={formAction}
+        onChange={(e) => setLivePrefs(readLivePrefs(e.currentTarget))}
+        className="space-y-8"
+      >
         <Card title="Swell">
           <div className="grid grid-cols-2 gap-4">
             <div>
