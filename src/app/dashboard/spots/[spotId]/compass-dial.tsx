@@ -47,9 +47,12 @@ const CARDINALS = [
 export function CompassDial({
   value,
   onChange,
+  allowAny = true,
 }: {
   value: DialValue
   onChange: (v: DialValue) => void
+  /** When false, the "Any direction" escape hatch is hidden (e.g. wind). */
+  allowAny?: boolean
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const valueRef = useRef(value)
@@ -100,14 +103,16 @@ export function CompassDial({
 
   return (
     <div>
-      <label className="flex items-center gap-2 text-sm text-black dark:text-zinc-50">
-        <input
-          type="checkbox"
-          checked={value.any}
-          onChange={(e) => onChange({ ...value, any: e.target.checked })}
-        />
-        Any direction
-      </label>
+      {allowAny && (
+        <label className="flex items-center gap-2 text-sm text-black dark:text-zinc-50">
+          <input
+            type="checkbox"
+            checked={value.any}
+            onChange={(e) => onChange({ ...value, any: e.target.checked })}
+          />
+          Any direction
+        </label>
+      )}
 
       <div
         className={`mt-2 flex justify-center ${value.any ? 'pointer-events-none opacity-40' : ''}`}

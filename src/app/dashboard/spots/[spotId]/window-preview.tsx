@@ -4,15 +4,15 @@ import { useMemo } from 'react'
 import type { ForecastPoint, TideEvent } from '@/lib/providers/types'
 // PURE scoring module only — index.ts pulls in the admin client and is server-only.
 import { scoreSpot, type SpotPrefs, type Window } from '@/lib/scoring/scoring'
+import { formatHeightRange, formatWindRange, type Unit } from './units'
 
-const r1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1)
 const r0 = (n: number) => String(Math.round(n))
 
-function summarise(w: Window): string {
+function summarise(w: Window, unit: Unit): string {
   return (
-    `${r1(w.swellHeightMin)}–${r1(w.swellHeightMax)}m · ` +
+    `${formatHeightRange(w.swellHeightMin, w.swellHeightMax, unit)} · ` +
     `${r0(w.periodMin)}–${r0(w.periodMax)}s · ` +
-    `wind ${r0(w.windSpeedMin)}–${r0(w.windSpeedMax)} km/h`
+    `wind ${formatWindRange(w.windSpeedMin, w.windSpeedMax, unit)}`
   )
 }
 
@@ -26,11 +26,13 @@ export function WindowPreview({
   tide,
   prefs,
   timezone,
+  unit,
 }: {
   forecast: ForecastPoint[]
   tide: TideEvent[]
   prefs: SpotPrefs
   timezone: string
+  unit: Unit
 }) {
   const windows = useMemo(
     () => scoreSpot(forecast, tide, prefs),
@@ -104,7 +106,7 @@ export function WindowPreview({
                       {timeFmt.format(new Date(w.end))}
                     </span>
                     <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                      {summarise(w)}
+                      {summarise(w, unit)}
                     </span>
                   </li>
                 ))}
