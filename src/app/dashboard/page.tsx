@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -95,23 +96,34 @@ export default async function DashboardPage() {
                 className="flex items-center justify-between gap-4 py-3"
               >
                 <div>
-                  <p className="font-medium text-black dark:text-zinc-50">
+                  <Link
+                    href={`/dashboard/spots/${f.spot_id}`}
+                    className="font-medium text-black underline-offset-2 hover:underline dark:text-zinc-50"
+                  >
                     {f.label ?? f.spots?.name ?? 'Unknown spot'}
-                  </p>
+                  </Link>
                   {f.spots && (
                     <p className="text-xs text-zinc-500 dark:text-zinc-500">
                       {f.spots.latitude.toFixed(4)}, {f.spots.longitude.toFixed(4)}
                     </p>
                   )}
                 </div>
-                <form action={unfollowSpot.bind(null, f.spot_id)}>
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded-lg border border-black/[.12] px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-white/[.2] dark:text-red-400 dark:hover:bg-red-950/40"
+                <div className="flex shrink-0 items-center gap-2">
+                  <Link
+                    href={`/dashboard/spots/${f.spot_id}`}
+                    className="rounded-lg border border-black/[.12] px-3 py-1.5 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.2] dark:hover:bg-white/[.06]"
                   >
-                    Remove
-                  </button>
-                </form>
+                    Edit
+                  </Link>
+                  <form action={unfollowSpot.bind(null, f.spot_id)}>
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-black/[.12] px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-white/[.2] dark:text-red-400 dark:hover:bg-red-950/40"
+                    >
+                      Remove
+                    </button>
+                  </form>
+                </div>
               </li>
             ))}
           </ul>
