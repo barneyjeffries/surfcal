@@ -3,15 +3,19 @@ import { getWindowsForUser } from '@/lib/scoring'
 import { buildCalendar, formatUtcStamp, type CalEvent } from '@/lib/ical'
 import {
   formatHeightRange,
-  formatWindRange,
+  formatWind,
   type Unit,
 } from '@/app/dashboard/spots/[spotId]/units'
 
 export const dynamic = 'force-dynamic'
 
 const round0 = (n: number) => Math.round(n)
-// Window start-directions can be null (no swell/wind-dir constraint set).
-const dir = (n: number | null) => (n == null ? '?' : String(round0(n)))
+
+// Map a bearing in degrees to a 16-point compass label; "?" when unset
+// (window start-directions can be null if no swell/wind-dir constraint is set).
+const POINTS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW']
+const compass = (deg: number | null): string =>
+  deg == null ? '?' : POINTS[Math.round(deg / 22.5) % 16]
 
 /**
  * GET /api/calendar/[token]
@@ -59,10 +63,11 @@ export async function GET(
         summary:
           `🏄 ${spot.label ?? spot.name} ` +
           `${formatHeightRange(w.swellHeightMin, w.swellHeightMax, unit)}, ` +
-          `${round0(w.periodMin)}–${round0(w.periodMax)}s`,
+          `${formatWind((w.windSpeedMin + w.windSpeedMax) / 2, unit)} ` +
+          `${compass(w.windDirDegStart)}`,
         description:
-          `Wind ${formatWindRange(w.windSpeedMin, w.windSpeedMax, unit)}. ` +
-          `Swell from ${dir(w.swellDirDegStart)}°, wind from ${dir(w.windDirDegStart)}°.`,
+          `Swell ~${round0((w.periodMin + w.periodMax) / 2)}s from ${compass(w.swellDirDegStart)}. ` +
+          `Wind from ${compass(w.windDirDegStart)}.`,
       })
     }
   }
