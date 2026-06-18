@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { ForecastPoint, TideEvent } from '@/lib/providers/types'
 import { PreferencesForm } from './preferences-form'
 import type { Prefs } from './types'
+import type { Unit } from './units'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +27,14 @@ export default async function SpotPreferencesPage({
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  // Display-unit preference lives on the profile so the feed can match it.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('units')
+    .eq('id', user.id)
+    .maybeSingle()
+  const initialUnit: Unit = profile?.units === 'metric' ? 'metric' : 'imperial'
 
   // RLS already restricts user_spots to this user's links; the eq() pins the spot.
   const { data } = await supabase
@@ -85,6 +94,7 @@ export default async function SpotPreferencesPage({
       spotId={spotId}
       spotName={spots?.name ?? 'Spot'}
       prefs={prefs}
+      initialUnit={initialUnit}
       forecast={forecast}
       tide={tide}
       timezone={spots?.timezone ?? 'UTC'}

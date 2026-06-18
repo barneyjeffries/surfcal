@@ -1,45 +1,72 @@
 'use client'
 
-import { useRef } from 'react'
-
 /**
- * Custom single- and dual-handle range sliders. Native <input type="range">
- * can't do a styled dual-thumb track, and these need to look considered, so
- * both are pointer-driven. Values are controlled; the parent owns state and
- * mirrors it into hidden inputs for the save action.
+ * Single- and dual-handle range sliders built on native <input type="range">,
+ * so dragging, touch and keyboard support all come from the browser rather than
+ * hand-rolled pointer maths (which is what was broken before).
+ *
+ * The visible track + sky fill are our own divs drawn behind the inputs; the
+ * native tracks are transparent and only the native thumbs are interactive. For
+ * the dual slider, two inputs are overlaid and `pointer-events` is disabled on
+ * the input bodies and re-enabled on the thumbs, so both thumbs stay grabbable.
+ *
+ * Same API as before: the parent owns state and mirrors values into hidden
+ * inputs for the save action, so these need no `name`.
  */
 
-function snap(v: number, min: number, max: number, step: number): number {
-  const stepped = Math.round((v - min) / step) * step + min
-  return Math.min(max, Math.max(min, Number(stepped.toFixed(6))))
+const RANGE_CSS = `
+.surfcal-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1.5rem;
+  margin: 0;
+  background: transparent;
+  outline: none;
 }
-
-function valueFromPointer(
-  el: HTMLElement,
-  clientX: number,
-  min: number,
-  max: number,
-  step: number,
-): number {
-  const rect = el.getBoundingClientRect()
-  const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
-  return snap(min + ratio * (max - min), min, max, step)
+.surfcal-range::-webkit-slider-runnable-track { height: 1.5rem; background: transparent; }
+.surfcal-range::-moz-range-track { height: 1.5rem; background: transparent; }
+.surfcal-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 1rem;
+  width: 1rem;
+  margin-top: 0.25rem;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid #0ea5e9;
+  box-shadow: 0 1px 2px rgba(0,0,0,.12);
+  cursor: grab;
 }
-
-const pct = (v: number, min: number, max: number) => ((v - min) / (max - min)) * 100
+.surfcal-range::-webkit-slider-thumb:active { cursor: grabbing; }
+.surfcal-range::-moz-range-thumb {
+  height: 1rem;
+  width: 1rem;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid #0ea5e9;
+  box-shadow: 0 1px 2px rgba(0,0,0,.12);
+  cursor: grab;
+}
+.surfcal-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px rgba(56,189,248,.5); }
+.surfcal-range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px rgba(56,189,248,.5); }
+/* Dual range: overlay two inputs; only the thumbs catch pointer events. */
+.surfcal-range--overlay { position: absolute; inset: 0; pointer-events: none; }
+.surfcal-range--overlay::-webkit-slider-thumb { pointer-events: auto; }
+.surfcal-range--overlay::-moz-range-thumb { pointer-events: auto; }
+@media (prefers-color-scheme: dark) {
+  .surfcal-range::-webkit-slider-thumb { background: #18181b; }
+  .surfcal-range::-moz-range-thumb { background: #18181b; }
+}
+`
 
 const TRACK =
-  'absolute top-1/2 h-1.5 w-full -translate-y-1/2 rounded-full bg-black/[.1] dark:bg-white/[.14]'
+  'pointer-events-none absolute top-1/2 h-1.5 w-full -translate-y-1/2 rounded-full bg-black/[.1] dark:bg-white/[.14]'
 const FILL =
-  'absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-sky-500'
-const HANDLE =
-  'absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-sky-500 bg-white shadow-sm outline-none cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-sky-400 dark:bg-zinc-900'
+  'pointer-events-none absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-sky-500'
 
-function arrowDelta(key: string, step: number): number {
-  if (key === 'ArrowLeft' || key === 'ArrowDown') return -step
-  if (key === 'ArrowRight' || key === 'ArrowUp') return step
-  return 0
-}
+const pct = (v: number, min: number, max: number) =>
+  ((v - min) / (max - min)) * 100
 
 export function SingleRange({
   min,
@@ -54,54 +81,20 @@ export function SingleRange({
   value: number
   onChange: (v: number) => void
 }) {
-  const trackRef = useRef<HTMLDivElement>(null)
-  const onChangeRef = useRef(onChange)
-  onChangeRef.current = onChange
-
-  const begin = (e: React.PointerEvent) => {
-    e.preventDefault()
-    const apply = (clientX: number) => {
-      if (trackRef.current) {
-        onChangeRef.current(valueFromPointer(trackRef.current, clientX, min, max, step))
-      }
-    }
-    apply(e.clientX)
-    const move = (ev: PointerEvent) => apply(ev.clientX)
-    const up = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-  }
-
-  const onKey = (e: React.KeyboardEvent) => {
-    const d = arrowDelta(e.key, step)
-    if (!d) return
-    e.preventDefault()
-    onChange(snap(value + d, min, max, step))
-  }
-
   const p = pct(value, min, max)
   return (
-    <div
-      ref={trackRef}
-      onPointerDown={begin}
-      className="relative h-6 cursor-pointer touch-none select-none"
-    >
+    <div className="relative h-6 select-none">
+      <style>{RANGE_CSS}</style>
       <div className={TRACK} />
       <div className={FILL} style={{ left: 0, width: `${p}%` }} />
-      <button
-        type="button"
-        role="slider"
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={value}
-        tabIndex={0}
-        onKeyDown={onKey}
-        onPointerDown={(e) => e.stopPropagation()}
-        className={HANDLE}
-        style={{ left: `${p}%` }}
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="surfcal-range relative"
       />
     </div>
   )
@@ -122,69 +115,38 @@ export function DualRange({
   valueMax: number
   onChange: (lo: number, hi: number) => void
 }) {
-  const trackRef = useRef<HTMLDivElement>(null)
-  // Live refs so clamping during a drag uses current values, not drag-start ones.
-  const loRef = useRef(valueMin)
-  const hiRef = useRef(valueMax)
-  const onChangeRef = useRef(onChange)
-  loRef.current = valueMin
-  hiRef.current = valueMax
-  onChangeRef.current = onChange
-
-  const drag = (which: 'lo' | 'hi') => (e: React.PointerEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const move = (ev: PointerEvent) => {
-      if (!trackRef.current) return
-      const v = valueFromPointer(trackRef.current, ev.clientX, min, max, step)
-      if (which === 'lo') onChangeRef.current(Math.min(v, hiRef.current), hiRef.current)
-      else onChangeRef.current(loRef.current, Math.max(v, loRef.current))
-    }
-    const up = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-  }
-
-  const onKey = (which: 'lo' | 'hi') => (e: React.KeyboardEvent) => {
-    const d = arrowDelta(e.key, step)
-    if (!d) return
-    e.preventDefault()
-    if (which === 'lo') onChange(snap(Math.min(valueMin + d, valueMax), min, max, step), valueMax)
-    else onChange(valueMin, snap(Math.max(valueMax + d, valueMin), min, max, step))
-  }
-
   const lo = pct(valueMin, min, max)
   const hi = pct(valueMax, min, max)
+  // When the band is pushed to the top end, lift the min thumb above the max
+  // thumb so it stays grabbable where they crowd together.
+  const minOnTop = valueMin > min + (max - min) * 0.75
+
   return (
-    <div ref={trackRef} className="relative h-6 touch-none select-none">
+    <div className="relative h-6 select-none">
+      <style>{RANGE_CSS}</style>
       <div className={TRACK} />
       <div className={FILL} style={{ left: `${lo}%`, width: `${hi - lo}%` }} />
-      <button
-        type="button"
-        role="slider"
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={valueMin}
-        tabIndex={0}
-        onPointerDown={drag('lo')}
-        onKeyDown={onKey('lo')}
-        className={HANDLE}
-        style={{ left: `${lo}%` }}
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={valueMin}
+        aria-label="Minimum"
+        onChange={(e) => onChange(Math.min(Number(e.target.value), valueMax), valueMax)}
+        className="surfcal-range surfcal-range--overlay"
+        style={{ zIndex: minOnTop ? 5 : 3 }}
       />
-      <button
-        type="button"
-        role="slider"
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={valueMax}
-        tabIndex={0}
-        onPointerDown={drag('hi')}
-        onKeyDown={onKey('hi')}
-        className={HANDLE}
-        style={{ left: `${hi}%` }}
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={valueMax}
+        aria-label="Maximum"
+        onChange={(e) => onChange(valueMin, Math.max(Number(e.target.value), valueMin))}
+        className="surfcal-range surfcal-range--overlay"
+        style={{ zIndex: 4 }}
       />
     </div>
   )

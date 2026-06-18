@@ -1,17 +1,16 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState, useState, useTransition } from 'react'
 import type { ForecastPoint, TideEvent } from '@/lib/providers/types'
 import type { SpotPrefs } from '@/lib/scoring/scoring'
-import { savePreferences } from './actions'
+import { savePreferences, setUnits } from './actions'
 import { CompassDial, type DialValue } from './compass-dial'
 import { DualRange, SingleRange } from './range-slider'
 import type { Prefs, SaveState } from './types'
 import {
   formatHeight,
   formatWind,
-  UNITS_STORAGE_KEY,
   type Unit,
 } from './units'
 import { WindowPreview } from './window-preview'
@@ -148,6 +147,7 @@ export function PreferencesForm({
   spotId,
   spotName,
   prefs,
+  initialUnit,
   forecast,
   tide,
   timezone,
@@ -157,6 +157,7 @@ export function PreferencesForm({
   spotId: string
   spotName: string
   prefs: Prefs
+  initialUnit: Unit
   forecast: ForecastPoint[]
   tide: TideEvent[]
   timezone: string
@@ -172,16 +173,13 @@ export function PreferencesForm({
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setS((prev) => ({ ...prev, [key]: value }))
 
-  // Units: Imperial by default, persisted in localStorage. Read after mount to
-  // avoid a hydration mismatch (server always renders the Imperial default).
-  const [unit, setUnit] = useState<Unit>('imperial')
-  useEffect(() => {
-    const stored = localStorage.getItem(UNITS_STORAGE_KEY)
-    if (stored === 'metric' || stored === 'imperial') setUnit(stored)
-  }, [])
+  // Units come from the profile (so the server-generated feed matches) and are
+  // persisted back to it on change. Storage stays metric; this only affects UI.
+  const [unit, setUnit] = useState<Unit>(initialUnit)
+  const [, startUnitTransition] = useTransition()
   const changeUnit = (u: Unit) => {
     setUnit(u)
-    localStorage.setItem(UNITS_STORAGE_KEY, u)
+    startUnitTransition(() => setUnits(u))
   }
 
   const livePrefs = toSpotPrefs(s)

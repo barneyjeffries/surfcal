@@ -152,3 +152,22 @@ export async function savePreferences(
   revalidatePath(`/dashboard/spots/${spotId}`)
   return { status: 'saved' }
 }
+
+/**
+ * Persist the user's display-unit preference on their profile.
+ *
+ * This lives on the profile (not localStorage) so the server-rendered iCal feed
+ * can format heights/wind to match the dashboard toggle. Storage stays metric;
+ * units only affect display.
+ */
+export async function setUnits(units: 'metric' | 'imperial'): Promise<void> {
+  if (units !== 'metric' && units !== 'imperial') return
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  await supabase.from('profiles').update({ units }).eq('id', user.id)
+  revalidatePath('/dashboard')
+}

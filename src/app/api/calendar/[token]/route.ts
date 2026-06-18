@@ -1,10 +1,14 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getWindowsForUser } from '@/lib/scoring'
 import { buildCalendar, formatUtcStamp, type CalEvent } from '@/lib/ical'
+import {
+  formatHeightRange,
+  formatWindRange,
+  type Unit,
+} from '@/app/dashboard/spots/[spotId]/units'
 
 export const dynamic = 'force-dynamic'
 
-const round1 = (n: number) => Math.round(n * 10) / 10
 const round0 = (n: number) => Math.round(n)
 // Window start-directions can be null (no swell/wind-dir constraint set).
 const dir = (n: number | null) => (n == null ? '?' : String(round0(n)))
@@ -17,6 +21,9 @@ const dir = (n: number | null) => (n == null ? '?' : String(round0(n)))
  * the service role (bypassing RLS), score their followed spots from the cache,
  * and emit a fresh VCALENDAR on every poll. The route only reads the cache — it
  * never calls Stormglass — so polling costs no API quota.
+ *
+ * Heights and wind speeds are displayed in the user's chosen units (profile
+ * `units`); stored values are always metric, so this is purely a display choice.
  */
 export async function GET(
   _req: Request,
@@ -28,12 +35,14 @@ export async function GET(
   const supabase = createAdminClient()
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('id')
+    .select('id, units')
     .eq('calendar_token', token)
     .maybeSingle()
 
   if (error) return new Response('Error', { status: 500 })
   if (!profile) return new Response('Not found', { status: 404 })
+
+  const unit: Unit = profile.units === 'metric' ? 'metric' : 'imperial'
 
   const spots = await getWindowsForUser(profile.id)
 
@@ -49,10 +58,10 @@ export async function GET(
         end,
         summary:
           `🏄 ${spot.label ?? spot.name} ` +
-          `${round1(w.swellHeightMin)}–${round1(w.swellHeightMax)}m, ` +
+          `${formatHeightRange(w.swellHeightMin, w.swellHeightMax, unit)}, ` +
           `${round0(w.periodMin)}–${round0(w.periodMax)}s`,
         description:
-          `Wind ${round0(w.windSpeedMin)}–${round0(w.windSpeedMax)} km/h. ` +
+          `Wind ${formatWindRange(w.windSpeedMin, w.windSpeedMax, unit)}. ` +
           `Swell from ${dir(w.swellDirDegStart)}°, wind from ${dir(w.windDirDegStart)}°.`,
       })
     }
