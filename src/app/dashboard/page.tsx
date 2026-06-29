@@ -31,7 +31,7 @@ export default async function DashboardPage() {
 
   // Run the three independent reads together.
   const [{ data: profile }, followedRes, catalogueRes] = await Promise.all([
-    supabase.from('profiles').select('calendar_token').eq('id', user.id).maybeSingle(),
+    supabase.from('profiles').select('calendar_token, is_admin').eq('id', user.id).maybeSingle(),
     // RLS already scopes user_spots to this user's links.
     supabase
       .from('user_spots')
@@ -46,6 +46,9 @@ export default async function DashboardPage() {
   // Spots in the shared catalogue that this user doesn't already follow.
   const followedIds = new Set(followed.map((f) => f.spot_id))
   const available = catalogue.filter((s) => !followedIds.has(s.id))
+
+  // Only admins can add or edit shared spots.
+  const isAdmin = profile?.is_admin ?? false
 
   // Build the absolute feed URL from the incoming request's host.
   const h = await headers()
@@ -141,7 +144,9 @@ export default async function DashboardPage() {
 
         {available.length === 0 ? (
           <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-500">
-            Nothing new in the catalogue — create a spot below.
+            {isAdmin
+              ? 'Nothing new in the catalogue — create a spot below.'
+              : 'Nothing new in the catalogue yet.'}
           </p>
         ) : (
           <ul className="mt-4 divide-y divide-black/[.06] dark:divide-white/[.08]">
@@ -170,8 +175,9 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      {/* Create a new spot */}
-      <section className="rounded-2xl border border-black/[.08] bg-white p-6 dark:border-white/[.145] dark:bg-zinc-950">
+      {/* Create a new spot — admin only */}
+      {isAdmin && (
+        <section className="rounded-2xl border border-black/[.08] bg-white p-6 dark:border-white/[.145] dark:bg-zinc-950">
         <h2 className="text-lg font-medium text-black dark:text-zinc-50">
           Create a new spot
         </h2>
@@ -242,7 +248,8 @@ export default async function DashboardPage() {
             Add spot
           </button>
         </form>
-      </section>
+        </section>
+      )}
 
       {/* Calendar feed */}
       <section className="rounded-2xl border border-black/[.08] bg-white p-6 dark:border-white/[.145] dark:bg-zinc-950">

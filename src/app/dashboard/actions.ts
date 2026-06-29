@@ -52,6 +52,15 @@ export async function unfollowSpot(spotId: string) {
 export async function createSpot(formData: FormData) {
   const { supabase, user } = await requireUser()
 
+  // Spot creation is admin-only. RLS enforces this too; this is a friendlier
+  // guard so a non-admin gets a clear error rather than an RLS failure.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', user.id)
+    .maybeSingle()
+  if (!profile?.is_admin) throw new Error('Only an admin can create spots.')
+
   const name = String(formData.get('name') ?? '').trim()
   const latitude = Number(formData.get('latitude'))
   const longitude = Number(formData.get('longitude'))
