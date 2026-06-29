@@ -260,9 +260,9 @@ export function PreferencesForm({
         <form action={formAction} className="space-y-8">
           <Card title="Swell">
             <Field
-              label={`Height (${unit === 'imperial' ? 'ft' : 'm'})`}
+              label={`Height at spot (${unit === 'imperial' ? 'ft' : 'm'})`}
               value={`${formatHeight(s.swellHeightMin, unit)} – ${swellMaxLabel}`}
-              hint="Offshore swell height from the forecast feed, not breaking-face height. Top handle = no upper limit."
+              hint="Estimated height at the break — the offshore swell scaled by this spot's exposure — so it's the same scale as the windows below. Top handle = no upper limit."
             >
               <DualRange
                 min={0}
