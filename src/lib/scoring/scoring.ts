@@ -1,6 +1,7 @@
 import type { ForecastPoint, TideEvent } from '@/lib/providers/types'
 import { tideStateAt, type TideState } from './tide'
 import { isDaylight } from './sun'
+import { effectiveSwellHeight, type SpotExposure } from './transform'
 
 /**
  * Scoring engine: cached forecast + tide + a user's thresholds -> qualifying
@@ -88,17 +89,8 @@ export function hourQualifies(
   if (point.swellPeriodS == null) return false
   if (point.swellPeriodS < prefs.swell_period_min_s) return false
 
-  // Swell direction arc
-  if (
-    !inArc(
-      point.swellDirectionDeg,
-      prefs.swell_dir_min_deg,
-      prefs.swell_dir_max_deg,
-      prefs.swell_dir_wraps,
-    )
-  ) {
-    return false
-  }
+  // Swell direction is now modelled by the spot's exposure window in the
+  // transform layer (it shapes the effective height), not gated here.
 
   // Wind speed
   if (point.windSpeedKmh == null) return false
@@ -175,17 +167,37 @@ function buildWindow(points: ForecastPoint[]): Window {
  * `lat`/`lng` (east-positive, so UK lng is negative) gate each hour to daylight
  * — first light through sunset — so night hours never qualify and windows end at
  * the last whole daylight hour. Daylight is computed locally (no API).
+ *
+ * `exposure` maps the offshore swell to an estimated height at the spot (see
+ * transform.ts), so the height checks and the window's reported heights reflect
+ * the break, not the open-ocean buoy.
  */
 export function scoreSpot(
   forecast: ForecastPoint[],
   tide: TideEvent[],
   prefs: SpotPrefs,
+  exposure: SpotExposure,
   lat: number,
   lng: number,
 ): Window[] {
   const sorted = [...forecast].sort(
     (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime(),
   )
+
+  // Map offshore swell height to the estimated height AT the spot. Every
+  // downstream check and the window's reported heights then use the spot
+  // height, while swellDirectionDeg is preserved for display.
+  const transformed: ForecastPoint[] = sorted.map((p) => ({
+    ...p,
+    swellHeightM: effectiveSwellHeight(
+      {
+        heightM: p.swellHeightM,
+        periodS: p.swellPeriodS,
+        directionDeg: p.swellDirectionDeg,
+      },
+      exposure,
+    ),
+  }))
 
   const windows: Window[] = []
   let run: ForecastPoint[] = []
@@ -196,7 +208,7 @@ export function scoreSpot(
     run = []
   }
 
-  for (const point of sorted) {
+  for (const point of transformed) {
     const instant = new Date(point.time)
     const tMs = instant.getTime()
     const tideState = tideStateAt(tide, instant)

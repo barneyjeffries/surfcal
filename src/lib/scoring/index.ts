@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { ForecastPoint, TideEvent } from '@/lib/providers/types'
 import { scoreSpot, type SpotPrefs, type Window } from './scoring'
+import type { SpotExposure } from './transform'
 
 /**
  * Cache-reading loader around the pure scoring engine.
@@ -36,7 +37,8 @@ export async function getWindowsForUser(userId: string): Promise<SpotWindows[]> 
        wind_dir_min_deg, wind_dir_max_deg, wind_dir_wraps, wind_speed_max_kmh,
        tide_direction, tide_height_min_norm, tide_height_max_norm,
        tide_high_offset_min_minutes, tide_high_offset_max_minutes,
-       spots ( name, latitude, longitude )`,
+       spots ( name, latitude, longitude,
+               swell_window_min_deg, swell_window_max_deg, swell_window_wraps, exposure_coeff )`,
     )
     .eq('user_id', userId)
 
@@ -102,16 +104,27 @@ export async function getWindowsForUser(userId: string): Promise<SpotWindows[]> 
       name?: string
       latitude?: number
       longitude?: number
+      swell_window_min_deg?: number | null
+      swell_window_max_deg?: number | null
+      swell_window_wraps?: boolean | null
+      exposure_coeff?: number | null
     } | null
     const name = spot?.name ?? ''
     const lat = spot?.latitude ?? 0
     const lng = spot?.longitude ?? 0
 
+    const exposure: SpotExposure = {
+      windowMinDeg: spot?.swell_window_min_deg ?? null,
+      windowMaxDeg: spot?.swell_window_max_deg ?? null,
+      windowWraps: spot?.swell_window_wraps ?? false,
+      exposureCoeff: spot?.exposure_coeff ?? 1,
+    }
+
     results.push({
       spotId,
       label: link.label,
       name,
-      windows: scoreSpot(forecast, tide, prefs, lat, lng),
+      windows: scoreSpot(forecast, tide, prefs, exposure, lat, lng),
     })
   }
 

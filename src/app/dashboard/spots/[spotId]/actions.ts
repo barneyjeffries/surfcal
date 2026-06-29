@@ -99,8 +99,15 @@ export async function savePreferences(
     errors.push('Tide height max must be ≥ min.')
   }
 
-  const swell = arc(formData, 'swell_dir', 'Swell', errors)
   const wind = arc(formData, 'wind_dir', 'Wind', errors)
+
+  // Spot-model fields (shared `spots` row, not per-user). The swell window
+  // reuses the same arc() parser as the wind arc.
+  const swellWindow = arc(formData, 'swell_window', 'Swell window', errors)
+  const exposureCoeff = reqNum(formData, 'exposure_coeff', 'Exposure', errors)
+  if (exposureCoeff < 0 || exposureCoeff > 1) {
+    errors.push('Exposure must be between 0 and 1.')
+  }
 
   const tideDirection = String(formData.get('tide_direction') ?? 'any')
   if (!['any', 'rising', 'falling'].includes(tideDirection)) {
@@ -120,6 +127,9 @@ export async function savePreferences(
     return { status: 'error', message: errors.join(' ') }
   }
 
+  // Personal preferences live on user_spots. Swell direction is no longer a
+  // personal gate — it moved to the shared spot model below — so swell_dir_* are
+  // left untouched here (they keep their existing, now-unused values).
   const { error } = await supabase
     .from('user_spots')
     .update({
@@ -127,9 +137,6 @@ export async function savePreferences(
       swell_height_min_m: swellHeightMin,
       swell_height_max_m: swellHeightMax,
       swell_period_min_s: swellPeriodMin,
-      swell_dir_min_deg: swell.min,
-      swell_dir_max_deg: swell.max,
-      swell_dir_wraps: swell.wraps,
       wind_dir_min_deg: wind.min,
       wind_dir_max_deg: wind.max,
       wind_dir_wraps: wind.wraps,
@@ -146,6 +153,23 @@ export async function savePreferences(
 
   if (error) {
     return { status: 'error', message: error.message }
+  }
+
+  // The spot model is shared catalogue data, so it updates the `spots` row for
+  // this spot (permitted by the spots_update_authenticated RLS policy). "Any
+  // direction" maps to a null window — no directional shadowing.
+  const { error: spotError } = await supabase
+    .from('spots')
+    .update({
+      swell_window_min_deg: swellWindow.min,
+      swell_window_max_deg: swellWindow.max,
+      swell_window_wraps: swellWindow.wraps,
+      exposure_coeff: exposureCoeff,
+    })
+    .eq('id', spotId)
+
+  if (spotError) {
+    return { status: 'error', message: spotError.message }
   }
 
   revalidatePath('/dashboard')

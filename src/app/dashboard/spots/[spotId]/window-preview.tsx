@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import type { ForecastPoint, TideEvent } from '@/lib/providers/types'
 // PURE scoring module only — index.ts pulls in the admin client and is server-only.
 import { scoreSpot, type SpotPrefs, type Window } from '@/lib/scoring/scoring'
+import type { SpotExposure } from '@/lib/scoring/transform'
 import { formatHeightRange, formatWindRange, type Unit } from './units'
 
 const r0 = (n: number) => String(Math.round(n))
@@ -25,6 +26,7 @@ export function WindowPreview({
   forecast,
   tide,
   prefs,
+  exposure,
   timezone,
   unit,
   lat,
@@ -33,14 +35,15 @@ export function WindowPreview({
   forecast: ForecastPoint[]
   tide: TideEvent[]
   prefs: SpotPrefs
+  exposure: SpotExposure
   timezone: string
   unit: Unit
   lat: number
   lng: number
 }) {
   const windows = useMemo(
-    () => scoreSpot(forecast, tide, prefs, lat, lng),
-    [forecast, tide, prefs, lat, lng],
+    () => scoreSpot(forecast, tide, prefs, exposure, lat, lng),
+    [forecast, tide, prefs, exposure, lat, lng],
   )
 
   // Formatters in the spot's own timezone (falling back to UTC if unset).

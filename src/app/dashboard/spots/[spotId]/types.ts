@@ -22,6 +22,17 @@ export type Prefs = {
   tide_high_offset_max_minutes: number | null
 }
 
+/**
+ * The shared spot's exposure model, loaded from the `spots` catalogue row.
+ * Unlike `Prefs` (per-user), editing these changes the spot for everyone.
+ */
+export type SpotModel = {
+  swell_window_min_deg: number | null
+  swell_window_max_deg: number | null
+  swell_window_wraps: boolean
+  exposure_coeff: number
+}
+
 /** Result of a save attempt, surfaced via useActionState. */
 export type SaveState =
   | { status: 'idle' }
