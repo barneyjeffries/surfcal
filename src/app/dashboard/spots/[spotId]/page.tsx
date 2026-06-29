@@ -30,12 +30,14 @@ export default async function SpotPreferencesPage({
   if (!user) redirect('/login')
 
   // Display-unit preference lives on the profile so the feed can match it.
+  // is_admin gates the link to the shared spot-model editor.
   const { data: profile } = await supabase
     .from('profiles')
-    .select('units')
+    .select('units, is_admin')
     .eq('id', user.id)
     .maybeSingle()
   const initialUnit: Unit = profile?.units === 'metric' ? 'metric' : 'imperial'
+  const isAdmin = profile?.is_admin === true
 
   // RLS already restricts user_spots to this user's links; the eq() pins the spot.
   const { data } = await supabase
@@ -106,6 +108,7 @@ export default async function SpotPreferencesPage({
       spotName={spots?.name ?? 'Spot'}
       prefs={prefs}
       spotModel={spotModel}
+      isAdmin={isAdmin}
       initialUnit={initialUnit}
       forecast={forecast}
       tide={tide}

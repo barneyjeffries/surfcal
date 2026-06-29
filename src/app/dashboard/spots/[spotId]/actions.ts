@@ -101,14 +101,6 @@ export async function savePreferences(
 
   const wind = arc(formData, 'wind_dir', 'Wind', errors)
 
-  // Spot-model fields (shared `spots` row, not per-user). The swell window
-  // reuses the same arc() parser as the wind arc.
-  const swellWindow = arc(formData, 'swell_window', 'Swell window', errors)
-  const exposureCoeff = reqNum(formData, 'exposure_coeff', 'Exposure', errors)
-  if (exposureCoeff < 0 || exposureCoeff > 1) {
-    errors.push('Exposure must be between 0 and 1.')
-  }
-
   const tideDirection = String(formData.get('tide_direction') ?? 'any')
   if (!['any', 'rising', 'falling'].includes(tideDirection)) {
     errors.push('Invalid tide direction.')
@@ -128,8 +120,9 @@ export async function savePreferences(
   }
 
   // Personal preferences live on user_spots. Swell direction is no longer a
-  // personal gate — it moved to the shared spot model below — so swell_dir_* are
-  // left untouched here (they keep their existing, now-unused values).
+  // personal gate — it moved to the shared spot model (edited on the admin
+  // spot-edit screen) — so swell_dir_* are left untouched here (they keep their
+  // existing, now-unused values).
   const { error } = await supabase
     .from('user_spots')
     .update({
@@ -155,12 +148,59 @@ export async function savePreferences(
     return { status: 'error', message: error.message }
   }
 
-  // The spot model is shared catalogue data, so it updates the `spots` row for
-  // this spot (permitted by the spots_update_authenticated RLS policy). "Any
-  // direction" maps to a null window — no directional shadowing.
-  const { error: spotError } = await supabase
+  revalidatePath('/dashboard')
+  revalidatePath(`/dashboard/spots/${spotId}`)
+  return { status: 'saved' }
+}
+
+/**
+ * Update the shared spot-model fields on the `spots` catalogue row: name, the
+ * swell window, and the exposure coefficient. These describe the physical break
+ * and affect every user who follows it, so editing them is ADMIN-ONLY.
+ *
+ * Admin status is checked here for a friendly error; the RLS policy
+ * (spots_update_admin) enforces it server-side too.
+ */
+export async function updateSpot(
+  spotId: string,
+  _prev: SaveState,
+  formData: FormData,
+): Promise<SaveState> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', user.id)
+    .maybeSingle()
+  if (!profile?.is_admin) {
+    return { status: 'error', message: 'Only an admin can edit spots.' }
+  }
+
+  const errors: string[] = []
+
+  const name = String(formData.get('name') ?? '').trim()
+  if (name === '') errors.push('Spot name is required.')
+
+  // The swell window reuses the shared arc() parser. "Any direction" → null.
+  const swellWindow = arc(formData, 'swell_window', 'Swell window', errors)
+  const exposureCoeff = reqNum(formData, 'exposure_coeff', 'Exposure', errors)
+  if (exposureCoeff < 0 || exposureCoeff > 1) {
+    errors.push('Exposure must be between 0 and 1.')
+  }
+
+  if (errors.length > 0) {
+    return { status: 'error', message: errors.join(' ') }
+  }
+
+  const { error } = await supabase
     .from('spots')
     .update({
+      name,
       swell_window_min_deg: swellWindow.min,
       swell_window_max_deg: swellWindow.max,
       swell_window_wraps: swellWindow.wraps,
@@ -168,12 +208,13 @@ export async function savePreferences(
     })
     .eq('id', spotId)
 
-  if (spotError) {
-    return { status: 'error', message: spotError.message }
+  if (error) {
+    return { status: 'error', message: error.message }
   }
 
   revalidatePath('/dashboard')
   revalidatePath(`/dashboard/spots/${spotId}`)
+  revalidatePath(`/dashboard/spots/${spotId}/edit`)
   return { status: 'saved' }
 }
 

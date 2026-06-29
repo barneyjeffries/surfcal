@@ -41,17 +41,6 @@ type FormState = {
   tideOffsetEnabled: boolean
   tideOffsetMin: number // minutes relative to high (−360..360)
   tideOffsetMax: number
-  // Spot model (shared across users) — the spot's swell window + exposure.
-  swellWindow: DialValue
-  exposureCoeff: number // 0..1
-}
-
-/** Swell dial: null/null → "any". */
-function swellDialFrom(min: number | null, max: number | null): DialValue {
-  if (min == null || max == null) {
-    return { minDeg: 0, maxDeg: 90, wraps: false, any: true }
-  }
-  return { minDeg: min, maxDeg: max, wraps: min > max, any: false }
 }
 
 /** Wind dial: never "any" — fall back to the default half-circle if unset. */
@@ -62,7 +51,7 @@ function windDialFrom(min: number | null, max: number | null): DialValue {
   return { minDeg: min, maxDeg: max, wraps: min > max, any: false }
 }
 
-function initialState(prefs: Prefs, spotModel: SpotModel): FormState {
+function initialState(prefs: Prefs): FormState {
   return {
     label: prefs.label ?? '',
     swellHeightMin: prefs.swell_height_min_m,
@@ -79,11 +68,6 @@ function initialState(prefs: Prefs, spotModel: SpotModel): FormState {
       prefs.tide_high_offset_max_minutes != null,
     tideOffsetMin: prefs.tide_high_offset_min_minutes ?? -120,
     tideOffsetMax: prefs.tide_high_offset_max_minutes ?? 60,
-    swellWindow: swellDialFrom(
-      spotModel.swell_window_min_deg,
-      spotModel.swell_window_max_deg,
-    ),
-    exposureCoeff: spotModel.exposure_coeff,
   }
 }
 
@@ -115,13 +99,17 @@ function toSpotPrefs(s: FormState): SpotPrefs {
   }
 }
 
-/** Derive the SpotExposure (shared spot model) the transform layer expects. */
-function toSpotExposure(s: FormState): SpotExposure {
+/**
+ * Derive the SpotExposure (shared spot model) the transform layer expects,
+ * straight from the stored spot row. It's no longer editable here — admins set
+ * it on the spot-edit screen — so the preview just scores with the real values.
+ */
+function toSpotExposure(m: SpotModel): SpotExposure {
   return {
-    windowMinDeg: s.swellWindow.any ? null : s.swellWindow.minDeg,
-    windowMaxDeg: s.swellWindow.any ? null : s.swellWindow.maxDeg,
-    windowWraps: s.swellWindow.any ? false : s.swellWindow.minDeg > s.swellWindow.maxDeg,
-    exposureCoeff: s.exposureCoeff,
+    windowMinDeg: m.swell_window_min_deg,
+    windowMaxDeg: m.swell_window_max_deg,
+    windowWraps: m.swell_window_wraps,
+    exposureCoeff: m.exposure_coeff,
   }
 }
 
@@ -167,6 +155,7 @@ export function PreferencesForm({
   spotName,
   prefs,
   spotModel,
+  isAdmin,
   initialUnit,
   forecast,
   tide,
@@ -178,6 +167,7 @@ export function PreferencesForm({
   spotName: string
   prefs: Prefs
   spotModel: SpotModel
+  isAdmin: boolean
   initialUnit: Unit
   forecast: ForecastPoint[]
   tide: TideEvent[]
@@ -190,7 +180,7 @@ export function PreferencesForm({
     { status: 'idle' },
   )
 
-  const [s, setS] = useState<FormState>(() => initialState(prefs, spotModel))
+  const [s, setS] = useState<FormState>(() => initialState(prefs))
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setS((prev) => ({ ...prev, [key]: value }))
 
@@ -204,7 +194,7 @@ export function PreferencesForm({
   }
 
   const livePrefs = toSpotPrefs(s)
-  const liveExposure = toSpotExposure(s)
+  const exposure = toSpotExposure(spotModel)
 
   const swellMaxLabel =
     s.swellHeightMax >= SWELL_MAX_M
@@ -236,6 +226,14 @@ export function PreferencesForm({
             Set the conditions that count as good surf here. An hour qualifies only when
             every condition you set is met.
           </p>
+          {isAdmin && (
+            <Link
+              href={`/dashboard/spots/${spotId}/edit`}
+              className="mt-2 inline-block text-sm font-medium text-sky-700 underline-offset-2 hover:underline dark:text-sky-400"
+            >
+              Edit spot details →
+            </Link>
+          )}
         </div>
 
         {/* Units toggle */}
@@ -414,65 +412,12 @@ export function PreferencesForm({
             </div>
           </Card>
 
-          {/* Spot model — shared, not personal. These describe the physical break
-              (which swells reach it, how exposed it is) and affect the spot for
-              every user, so they're visually set apart from the prefs above. */}
-          <section className="rounded-2xl border border-amber-500/40 bg-amber-50/50 p-6 dark:border-amber-400/30 dark:bg-amber-950/20">
-            <h2 className="text-lg font-medium text-black dark:text-zinc-50">
-              Spot model
-            </h2>
-            <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">
-              Affects this spot for everyone — these describe the break itself, not
-              your personal preferences.
-            </p>
-            <div className="mt-4 space-y-6">
-              <div>
-                <span className={labelClass}>Swell window</span>
-                <p className={hintClass}>
-                  The arc of swell directions that actually reach this spot (degrees
-                  the swell comes from). Swell from outside it is shadowed.
-                </p>
-                <div className="mt-2">
-                  <CompassDial
-                    value={s.swellWindow}
-                    onChange={(v) => set('swellWindow', v)}
-                  />
-                </div>
-              </div>
-
-              <Field
-                label="Exposure / size factor"
-                value={`${Math.round(s.exposureCoeff * 100)}%`}
-                hint="How much of the offshore swell height reaches the break. Lower = more sheltered."
-              >
-                <SingleRange
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={s.exposureCoeff}
-                  onChange={(v) => set('exposureCoeff', v)}
-                />
-              </Field>
-            </div>
-          </section>
-
           {/* Hidden inputs mirror the controlled state so the save action's
               FormData parsing is unchanged. */}
           <input type="hidden" name="swell_height_min_m" value={s.swellHeightMin} />
           <input type="hidden" name="swell_height_max_m" value={storedSwellMax(s.swellHeightMax)} />
           <input type="hidden" name="swell_period_min_s" value={s.swellPeriodMin} />
           <input type="hidden" name="wind_speed_max_kmh" value={s.windSpeedMax} />
-
-          {/* Spot model: swell window (reuses the arc() parser) + exposure. */}
-          <input type="hidden" name="swell_window_any" value={s.swellWindow.any ? 'on' : ''} />
-          <input type="hidden" name="swell_window_min_deg" value={s.swellWindow.minDeg} />
-          <input type="hidden" name="swell_window_max_deg" value={s.swellWindow.maxDeg} />
-          <input
-            type="hidden"
-            name="swell_window_wraps"
-            value={!s.swellWindow.any && s.swellWindow.minDeg > s.swellWindow.maxDeg ? 'on' : ''}
-          />
-          <input type="hidden" name="exposure_coeff" value={s.exposureCoeff} />
 
           {/* Wind never has an "any" option. */}
           <input type="hidden" name="wind_dir_any" value="" />
@@ -524,7 +469,7 @@ export function PreferencesForm({
             forecast={forecast}
             tide={tide}
             prefs={livePrefs}
-            exposure={liveExposure}
+            exposure={exposure}
             timezone={timezone}
             unit={unit}
             lat={lat}
